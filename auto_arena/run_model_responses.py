@@ -15,9 +15,6 @@ def load_model(model_name):
     if not model_info:
         raise ValueError("Unsupported model")
 
-    if model_info == "OPENAI":
-        return None, None
-
     if os.path.exists(model_info):
         print(f"HF model detected, loading from: {model_info}")
         tokenizer = AutoTokenizer.from_pretrained(pretrained_model_name_or_path=model_info, trust_remote_code=True)
@@ -42,12 +39,13 @@ def run_vllm_model(prompts, model):
     return responses
 
 def run_openai_model(prompts, model_name, temperature=0.7, max_tokens=1024):
+    openai.api_key = "sk-proj-tJPuS2rvAEYubMXSCxfCT3BlbkFJHXnkL3PMGmNhTiMJk02V"  # 设置你的 OpenAI API 密钥
+
     if "3.5-turbo-0125" in model_name:
         model_name = "gpt-3.5-turbo-0125"
     elif "4-1106" in model_name:
         model_name = "gpt-4-1106-preview"
     
-    openai.api_key = os.getenv("OPENAI_API_KEY")
     responses = []
     for prompt in prompts:
         response = openai.ChatCompletion.create(
@@ -108,5 +106,6 @@ def run_all_models(output_dir="model_responses"):
 
 if __name__ == "__main__":
     fire.Fire(run_all_models)
+
 
 
