@@ -22,7 +22,7 @@ def load_model(model_name):
         print(f"Model Loaded: {type(model)}")
 
         # Convert HF model to VLLM model
-        vllm_model = LLM(model_name=model_info)
+        vllm_model = LLM(model=model)
         return tokenizer, vllm_model
 
     raise FileNotFoundError("Model path does not exist")
