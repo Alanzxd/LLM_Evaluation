@@ -24,6 +24,8 @@ def load_model(model_name, device):
     if os.path.exists(model_info):
         print(f"HF model detected, loading from: {model_info}")
         tokenizer = AutoTokenizer.from_pretrained(pretrained_model_name_or_path=model_info, trust_remote_code=True)
+        if tokenizer.pad_token is None:
+            tokenizer.pad_token = tokenizer.eos_token
         print(f"Tokenizer Loaded: {type(tokenizer)}")
         model = AutoModelForCausalLM.from_pretrained(pretrained_model_name_or_path=model_info, device_map='auto', torch_dtype="auto").to(device)
         print(f"Model Loaded: {type(model)}")
@@ -74,7 +76,7 @@ def get_responses(rank, world_size, prompts, model_name, output_dir="model_respo
     return responses
 
 def load_jsonl(filename):
-    with open(filename, 'r') as file:
+    with open(filename, 'r') as file):
         return [json.loads(line.strip()) for line in file]
 
 def get_questions():
@@ -99,5 +101,4 @@ def run_parallel(world_size, model_names, output_dir="model_responses", batch_si
 
 if __name__ == "__main__":
     fire.Fire(run_parallel)
-
 
