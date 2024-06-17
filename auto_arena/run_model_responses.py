@@ -95,4 +95,3 @@ def run_parallel(world_size, model_names, output_dir="model_responses"):
 
 if __name__ == "__main__":
     fire.Fire(run_parallel)
-
