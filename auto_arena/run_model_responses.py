@@ -26,8 +26,7 @@ def run_vllm_model(prompts, model, max_new_tokens=200):
     
     responses = []
     for output in outputs:
-        responses.append(output.text)
-    
+        responses.append(output.outputs[0].text)  # Accessing the text attribute from the output
     return responses
 
 def save_responses(responses, model_name, output_dir, prompt_ids):
@@ -83,4 +82,3 @@ def run_all_models(model_names=None, output_dir="model_responses", max_new_token
 
 if __name__ == "__main__":
     fire.Fire(run_all_models)
-
