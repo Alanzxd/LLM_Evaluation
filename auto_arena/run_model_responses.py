@@ -60,7 +60,6 @@ def get_responses(prompts, model_name, output_dir="model_responses", max_new_tok
     save_responses(responses, model_name, output_dir, list(range(len(prompts))))
     
     # 释放显存和垃圾回收
-    del model
     torch.cuda.empty_cache()
     gc.collect()
     
