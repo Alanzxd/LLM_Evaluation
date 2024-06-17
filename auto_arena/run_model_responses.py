@@ -7,7 +7,6 @@ from vllm import LLM, SamplingParams
 from utils import existing_model_paths
 from tqdm import tqdm
 import uuid
-import openai
 
 def load_model(model_name):
     model_info = existing_model_paths.get(model_name)
@@ -38,28 +37,6 @@ def run_vllm_model(prompts, model):
     
     return responses
 
-def run_openai_model(prompts, model_name, temperature=0.7, max_tokens=1024):
-    openai.api_key = "sk-proj-tJPuS2rvAEYubMXSCxfCT3BlbkFJHXnkL3PMGmNhTiMJk02V"
-
-    if "3.5-turbo-0125" in model_name:
-        model_name = "gpt-3.5-turbo-0125"
-    elif "4-1106" in model_name:
-        model_name = "gpt-4-1106-preview"
-    
-    responses = []
-    for prompt in prompts:
-        response = openai.ChatCompletion.create(
-            model=model_name,
-            messages=[
-                {"role": "user", "content": prompt}
-            ],
-            temperature=temperature,
-            max_tokens=max_tokens
-        )
-        text = response.choices[0].message["content"].strip()
-        responses.append(text)
-    return responses
-
 def save_responses(responses, model_name, output_dir, prompt_ids):
     empty_responses = []
     for i, response in enumerate(responses):
@@ -79,7 +56,8 @@ def save_responses(responses, model_name, output_dir, prompt_ids):
 
 def get_responses(prompts, model_name, output_dir="model_responses"):
     if model_name in ["gpt4-1106", "gpt3.5-turbo-0125"]:
-        responses = run_openai_model(prompts, model_name)
+        print(f"Skipping model: {model_name}")
+        return []
     else:
         tokenizer, model = load_model(model_name)
         responses = run_vllm_model(prompts, model)
@@ -106,4 +84,5 @@ def run_all_models(output_dir="model_responses"):
 
 if __name__ == "__main__":
     fire.Fire(run_all_models)
+
 
