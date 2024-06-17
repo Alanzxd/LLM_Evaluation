@@ -90,6 +90,9 @@ def get_questions():
     return [question['turns'][0] for question in questions]
 
 def run_all_models(rank, world_size, model_names=None, output_dir="model_responses"):
+    os.environ['MASTER_ADDR'] = 'localhost'
+    os.environ['MASTER_PORT'] = '12355'
+    
     dist.init_process_group("nccl", rank=rank, world_size=world_size)
     torch.cuda.set_device(rank)
 
@@ -109,7 +112,6 @@ def run_parallel(world_size, model_names=None, output_dir="model_responses"):
 
 if __name__ == "__main__":
     fire.Fire(run_parallel)
-
 
 
 
