@@ -3,7 +3,6 @@ import json
 import fire
 import torch
 from transformers import AutoTokenizer, AutoModelForCausalLM
-from vllm import LLM, SamplingParams
 from utils import existing_model_paths
 from tqdm import tqdm
 import uuid
@@ -28,7 +27,7 @@ def run_model(prompts, tokenizer, model):
     tokenizer.pad_token = tokenizer.eos_token
     inputs = tokenizer(prompts, padding=True, return_tensors="pt").to("cuda")
 
-    outputs = model.generate(**inputs)  # 使用默认生成参数
+    outputs = model.generate(**inputs, max_new_tokens=200)  # 使用max_new_tokens设置生成的长度
 
     responses = []
     for i in range(outputs.shape[0]):
@@ -89,6 +88,7 @@ def run_all_models(output_dir="model_responses"):
 
 if __name__ == "__main__":
     fire.Fire(run_all_models)
+
 
 
 
