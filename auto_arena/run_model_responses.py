@@ -50,7 +50,7 @@ def run_openai_model(prompts, model_name, temperature=0.7, max_tokens=1024):
     openai.api_key = os.getenv("OPENAI_API_KEY")
     responses = []
     for prompt in prompts:
-        completion = openai.ChatCompletion.create(
+        response = openai.ChatCompletion.create(
             model=model_name,
             messages=[
                 {"role": "user", "content": prompt}
@@ -58,7 +58,7 @@ def run_openai_model(prompts, model_name, temperature=0.7, max_tokens=1024):
             temperature=temperature,
             max_tokens=max_tokens
         )
-        text = completion.choices[0].message["content"].strip()
+        text = response.choices[0].message["content"].strip()
         responses.append(text)
     return responses
 
