@@ -81,6 +81,8 @@ def get_questions():
     return [question['turns'][0] for question in questions]
 
 def run_all_models(rank, world_size, model_names, output_dir="model_responses", batch_size=1):
+    os.environ["MASTER_ADDR"] = "localhost"
+    os.environ["MASTER_PORT"] = "29500"
     dist.init_process_group("nccl", rank=rank, world_size=world_size)
     prompts = get_questions()
     
@@ -95,6 +97,5 @@ def run_parallel(world_size, model_names, output_dir="model_responses", batch_si
 
 if __name__ == "__main__":
     fire.Fire(run_parallel)
-
 
 
