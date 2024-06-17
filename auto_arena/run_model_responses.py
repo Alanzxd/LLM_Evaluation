@@ -18,6 +18,7 @@ def load_model(model_name):
         tokenizer = AutoTokenizer.from_pretrained(pretrained_model_name_or_path=model_info, trust_remote_code=True)
         print(f"Tokenizer Loaded: {type(tokenizer)}")
         model = AutoModelForCausalLM.from_pretrained(pretrained_model_name_or_path=model_info)
+        model.to("cuda")  # Ensure the model is moved to the GPU
         print(f"Model Loaded: {type(model)}")
         return tokenizer, model
 
@@ -27,7 +28,7 @@ def run_model(prompts, tokenizer, model):
     tokenizer.pad_token = tokenizer.eos_token
     inputs = tokenizer(prompts, padding=True, return_tensors="pt").to("cuda")
 
-    outputs = model.generate(**inputs, max_new_tokens=200)  # 使用max_new_tokens设置生成的长度
+    outputs = model.generate(**inputs, max_new_tokens=200)  # Use max_new_tokens to set the length of the generation
 
     responses = []
     for i in range(outputs.shape[0]):
@@ -88,7 +89,6 @@ def run_all_models(output_dir="model_responses"):
 
 if __name__ == "__main__":
     fire.Fire(run_all_models)
-
 
 
 
