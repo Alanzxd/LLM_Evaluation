@@ -18,7 +18,7 @@ def load_model(model_name):
         print(f"HF model detected, loading from: {model_info}")
         tokenizer = AutoTokenizer.from_pretrained(pretrained_model_name_or_path=model_info, trust_remote_code=True)
         print(f"Tokenizer Loaded: {type(tokenizer)}")
-        model = AutoModelForCausalLM.from_pretrained(pretrained_model_name_or_path=model_info, device_map='auto', torch_dtype="auto")
+        model = AutoModelForCausalLM.from_pretrained(pretrained_model_name_or_path=model_info)
         print(f"Model Loaded: {type(model)}")
 
         # Convert HF model to VLLM model
@@ -84,5 +84,6 @@ def run_all_models(output_dir="model_responses"):
 
 if __name__ == "__main__":
     fire.Fire(run_all_models)
+
 
 
