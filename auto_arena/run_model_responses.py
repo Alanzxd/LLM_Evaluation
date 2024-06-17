@@ -31,10 +31,10 @@ def load_model(model_name):
     raise FileNotFoundError("Model path does not exist")
 
 def run_hf_model(prompts, tokenizer, model):
-    if not callable(tokenizer):
-        raise TypeError("Tokenizer is not callable. Ensure it is correctly initialized.")
+    if not isinstance(tokenizer, AutoTokenizer):
+        raise TypeError("Tokenizer is not an instance of AutoTokenizer. Ensure it is correctly initialized.")
     tokenizer.pad_token = tokenizer.eos_token
-    inputs = tokenizer(prompts, padding=True, return_tensors="pt").to("cuda:7")
+    inputs = tokenizer(prompts, padding=True, return_tensors="pt").to("cuda:0")
 
     outputs = model.generate(**inputs)  # 使用默认生成参数
 
@@ -49,6 +49,7 @@ def run_hf_model(prompts, tokenizer, model):
         responses.append(response)
 
     return responses
+
 
 def run_vllm_model(prompts, model):
     sampling_params = SamplingParams()
