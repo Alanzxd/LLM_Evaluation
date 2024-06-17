@@ -20,21 +20,26 @@ def load_model(model_name):
         print(f"Tokenizer Loaded: {type(tokenizer)}")
         model = AutoModelForCausalLM.from_pretrained(pretrained_model_name_or_path=model_info)
         print(f"Model Loaded: {type(model)}")
-
-        # Convert HF model to VLLM model
-        vllm_model = LLM(model=model)
-        return tokenizer, vllm_model
+        return tokenizer, model
 
     raise FileNotFoundError("Model path does not exist")
 
-def run_vllm_model(prompts, model):
-    sampling_params = SamplingParams()
-    outputs = model.generate(prompts, sampling_params=sampling_params)
-    
+def run_model(prompts, tokenizer, model):
+    tokenizer.pad_token = tokenizer.eos_token
+    inputs = tokenizer(prompts, padding=True, return_tensors="pt").to("cuda")
+
+    outputs = model.generate(**inputs)  # 使用默认生成参数
+
     responses = []
-    for output in outputs:
-        responses.append(output.text)
-    
+    for i in range(outputs.shape[0]):
+        full_response = tokenizer.decode(outputs[i], skip_special_tokens=True)
+        prompt_end_idx = full_response.find(prompts[i]) + len(prompts[i])
+        if prompt_end_idx > -1 and prompt_end_idx < len(full_response):
+            response = full_response[prompt_end_idx:].strip()
+        else:
+            response = full_response
+        responses.append(response)
+
     return responses
 
 def save_responses(responses, model_name, output_dir, prompt_ids):
@@ -60,7 +65,7 @@ def get_responses(prompts, model_name, output_dir="model_responses"):
         return []
     else:
         tokenizer, model = load_model(model_name)
-        responses = run_vllm_model(prompts, model)
+        responses = run_model(prompts, tokenizer, model)
 
     save_responses(responses, model_name, output_dir, list(range(len(prompts))))
     return responses
@@ -84,6 +89,7 @@ def run_all_models(output_dir="model_responses"):
 
 if __name__ == "__main__":
     fire.Fire(run_all_models)
+
 
 
 
