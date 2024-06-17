@@ -76,6 +76,7 @@ def get_responses(rank, world_size, prompts, model_name, output_dir="model_respo
     else:
         tokenizer, model = load_model(model_name)
         model = torch.nn.parallel.DistributedDataParallel(model, device_ids=[rank])
+        dist.barrier()  # Synchronize before running the model
         responses = run_model(prompts, tokenizer, model)
 
     save_responses(responses, model_name, output_dir, list(range(len(prompts))))
@@ -112,7 +113,4 @@ def run_parallel(world_size, model_names=None, output_dir="model_responses"):
 
 if __name__ == "__main__":
     fire.Fire(run_parallel)
-
-
-
 
