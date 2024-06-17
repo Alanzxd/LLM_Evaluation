@@ -1,10 +1,9 @@
 import os
 import fire
-import json
 import torch
-from transformers import AutoTokenizer, AutoModelForCausalLM
+from transformers import AutoTokenizer, AutoModelForCausalLM, AutoConfig
+from torch.nn.parallel import DistributedDataParallel
 import openai
-from vllm import LLM, SamplingParams
 
 from utils import existing_model_paths
 
@@ -15,28 +14,34 @@ def load_model(model_name):
         raise ValueError("Unsupported model")
 
     if model_info == "OPENAI":
+        # print("OpenAI model detected, calling API.")
         return None, None
 
     if os.path.exists(model_info):
         print(f"HF model detected, loading from: {model_info}")
         tokenizer = AutoTokenizer.from_pretrained(pretrained_model_name_or_path=model_info, trust_remote_code=True)
         print("Tokenizer Loaded; Loading Model")
-        model = AutoModelForCausalLM.from_pretrained(pretrained_model_name_or_path=model_info, device_map='auto', torch_dtype="auto")
-
-        # Convert HF model to VLLM model
-        vllm_model = LLM(model_name=model_info)
-        return tokenizer, vllm_model
+        model = AutoModelForCausalLM.from_pretrained(pretrained_model_name_or_path=model_info, device_map = 'auto', torch_dtype="auto")
+        return tokenizer, model
 
     raise FileNotFoundError("Model path does not exist")
 
-def run_hf_model(prompts, tokenizer, model):
+def run_hf_model(prompts, tokenizer, model, temperature=0.7, max_tokens=1024):
     if not callable(tokenizer):
         raise TypeError("Tokenizer is not callable. Ensure it is correctly initialized.")
     tokenizer.pad_token = tokenizer.eos_token
     inputs = tokenizer(prompts, padding=True, return_tensors="pt").to("cuda:7")
 
-    outputs = model.generate(**inputs)  # 使用默认生成参数
+    outputs = model.generate(
+        **inputs,
+        temperature=temperature,
+        max_new_tokens=max_tokens,
+        do_sample= (temperature >= 1e-4)
+    )
 
+    # VLLM
+
+    # Decoding all responses
     responses = []
     for i in range(outputs.shape[0]):
         full_response = tokenizer.decode(outputs[i], skip_special_tokens=True)
@@ -49,17 +54,17 @@ def run_hf_model(prompts, tokenizer, model):
 
     return responses
 
-def run_vllm_model(prompts, model):
-    sampling_params = SamplingParams()
-    outputs = model.generate(prompts, sampling_params=sampling_params)
-    
-    responses = []
-    for output in outputs:
-        responses.append(output.text)
-    
-    return responses
+    # full_response = tokenizer.decode(outputs[0], skip_special_tokens=True)
 
-def run_openai_model(prompts, model_name, client):
+    # prompt_end_idx = full_response.find(prompt) + len(prompt)
+    # if prompt_end_idx > -1 and prompt_end_idx < len(full_response):
+    #     response = full_response[prompt_end_idx:].strip()
+    # else:
+    #     response = full_response
+
+    # return response
+
+def run_openai_model(prompts, model_name, client, temperature=0.7, max_tokens=1024):
     if "3.5-turbo-0125" in model_name:
         model_name = "gpt-3.5-turbo-0125"
     elif "4-1106" in model_name:
@@ -69,6 +74,7 @@ def run_openai_model(prompts, model_name, client):
         completion = client.chat.completions.create(
         model=model_name,
         messages=[
+            # {"role": "system", "content": "You are an impartial evaluator."},
             {"role": "user", "content": prompt}
         ]
         )
@@ -76,25 +82,13 @@ def run_openai_model(prompts, model_name, client):
         responses.append(str(text))
     return responses
 
-def save_responses(responses, output_file):
-    with open(output_file, 'w') as f:
-        json.dump(responses, f, indent=4)
-    print(f"Responses saved to {output_file}")
 
-def get_response(prompts, model_name, output_file="responses.json"):
-    tokenizer, model = load_model(model_name)
+# def get_response(prompt, tokenizer, model, temperature=0.7, max_tokens=1024):
 
-    if isinstance(model, LLM):
-        responses = run_vllm_model(prompts, model)
-    elif model_name == "OPENAI":
-        openai.api_key = os.getenv("OPENAI_API_KEY")
-        client = openai.OpenAI(api_key=openai.api_key)
-        responses = run_openai_model(prompts, model_name, client)
-    else:
-        responses = run_hf_model(prompts, tokenizer, model)
+#     if tokenizer and model:
+#         response = run_hf_model(prompt, model, tokenizer, model, temperature, max_tokens)
 
-    save_responses(responses, output_file)
-    return responses
+#     return str(response)
 
 if __name__ == "__main__":
     fire.Fire(get_response)
