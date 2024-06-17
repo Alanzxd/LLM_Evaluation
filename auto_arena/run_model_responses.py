@@ -39,7 +39,7 @@ def run_vllm_model(prompts, model):
     return responses
 
 def run_openai_model(prompts, model_name, temperature=0.7, max_tokens=1024):
-    client = openai.OpenAI(api_key="sk-proj-tJPuS2rvAEYubMXSCxfCT3BlbkFJHXnkL3PMGmNhTiMJk02V")
+    openai.api_key = "sk-proj-tJPuS2rvAEYubMXSCxfCT3BlbkFJHXnkL3PMGmNhTiMJk02V"
 
     if "3.5-turbo-0125" in model_name:
         model_name = "gpt-3.5-turbo-0125"
@@ -48,7 +48,7 @@ def run_openai_model(prompts, model_name, temperature=0.7, max_tokens=1024):
     
     responses = []
     for prompt in prompts:
-        response = client.ChatCompletion.create(
+        response = openai.ChatCompletion.create(
             model=model_name,
             messages=[
                 {"role": "user", "content": prompt}
