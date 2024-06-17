@@ -93,9 +93,8 @@ def run_all_models(rank, world_size, model_names, output_dir="model_responses", 
         get_responses(rank, world_size, prompts, model_name, output_dir, batch_size)
 
 def run_parallel(world_size, model_names, output_dir="model_responses", batch_size=1):
+    model_names = model_names.split(",")
     mp.spawn(run_all_models, args=(world_size, model_names, output_dir, batch_size), nprocs=world_size, join=True)
 
 if __name__ == "__main__":
     fire.Fire(run_parallel)
-
-
