@@ -28,8 +28,7 @@ def load_model(model_name, device):
         model = AutoModelForCausalLM.from_pretrained(pretrained_model_name_or_path=model_info, device_map='auto', torch_dtype="auto").to(device)
         print(f"Model Loaded: {type(model)}")
 
-        vllm_model = LLM(model=model)
-        return tokenizer, vllm_model
+        return tokenizer, model
 
     raise FileNotFoundError("Model path does not exist")
 
@@ -39,9 +38,11 @@ def run_model(prompts, tokenizer, model, device, batch_size=1):
 
     for i in range(0, len(prompts), batch_size):
         batch_prompts = prompts[i:i + batch_size]
-        outputs = model.generate(batch_prompts, sampling_params=sampling_params)
+        inputs = tokenizer(batch_prompts, padding=True, return_tensors="pt").to(device)
+        outputs = model.generate(**inputs, max_new_tokens=200)
+
         for output in outputs:
-            responses.append(output.text)
+            responses.append(tokenizer.decode(output, skip_special_tokens=True))
 
     return responses
 
