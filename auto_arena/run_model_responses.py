@@ -14,7 +14,7 @@ def load_model(model_name, device):
     model_info = existing_model_paths.get(model_name)
 
     if not model_info:
-        raise ValueError("Unsupported model")
+        raise ValueError(f"Unsupported model: {model_name}")
 
     if os.path.exists(model_info):
         print(f"HF model detected, loading from: {model_info}")
@@ -25,7 +25,7 @@ def load_model(model_name, device):
         print(f"Model Loaded: {type(model)}")
         return tokenizer, model
 
-    raise FileNotFoundError("Model path does not exist")
+    raise FileNotFoundError(f"Model path does not exist: {model_info}")
 
 def run_model(prompts, tokenizer, model, device):
     if not isinstance(tokenizer, AutoTokenizer):
@@ -53,7 +53,8 @@ def save_responses(responses, model_name, output_dir, prompt_ids):
         prompt_id = prompt_ids[i]
         directory = os.path.join(output_dir, f"mt_bench_question_{prompt_id}")
         os.makedirs(directory, exist_ok=True)
-        output_file = os.path.join(directory, f"{prompt_id}|{model_name}|{uuid.uuid4().hex}.jsonl")
+        timestamp = uuid.uuid1().int >> 64  # Generate a timestamp for the file name
+        output_file = os.path.join(directory, f"{prompt_id}|{model_name}|{timestamp}.jsonl")
         with open(output_file, 'w') as f:
             json.dump({"response": response}, f, indent=4)
         if response.strip() == "":
@@ -66,6 +67,7 @@ def save_responses(responses, model_name, output_dir, prompt_ids):
 
 def get_responses(rank, world_size, prompts, model_name, output_dir):
     device = torch.device(f"cuda:{rank}")
+    print(f"Loading model {model_name} on device {device}")
     tokenizer, model = load_model(model_name, device)
 
     responses = run_model(prompts, tokenizer, model, device)
@@ -95,3 +97,4 @@ def run_parallel(world_size, model_names, output_dir="model_responses"):
 
 if __name__ == "__main__":
     fire.Fire(run_parallel)
+
