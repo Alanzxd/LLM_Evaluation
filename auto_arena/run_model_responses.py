@@ -7,6 +7,7 @@ import openai
 from vllm import LLM, SamplingParams
 from utils import existing_model_paths
 from tqdm import tqdm
+import time
 
 def load_model(model_name):
     model_info = existing_model_paths.get(model_name)
@@ -76,12 +77,18 @@ def run_openai_model(prompts, model_name, client):
         responses.append(str(text))
     return responses
 
-def save_responses(responses, model_name, output_file):
-    with open(output_file, 'w') as f:
-        json.dump({model_name: responses}, f, indent=4)
-    print(f"Responses for {model_name} saved to {output_file}")
+def save_responses(prompts, responses, model_name, output_dir):
+    timestamp = int(time.time())
+    for i, response in enumerate(responses):
+        prompt_id = i + 1
+        directory = os.path.join(output_dir, f"mt_bench_question_{prompt_id}")
+        os.makedirs(directory, exist_ok=True)
+        filename = os.path.join(directory, f"{prompt_id}|{model_name}|{timestamp}.jsonl")
+        with open(filename, 'w') as f:
+            json.dump({'response': [response], 'prompt': prompts[i]}, f, indent=4)
+    print(f"Responses for {model_name} saved to {output_dir}")
 
-def get_responses(prompts, model_name, output_dir="responses"):
+def get_responses(prompts, model_name, output_dir="model_responses"):
     tokenizer, model = load_model(model_name)
 
     if isinstance(model, LLM):
@@ -93,8 +100,7 @@ def get_responses(prompts, model_name, output_dir="responses"):
     else:
         responses = run_hf_model(prompts, tokenizer, model)
 
-    output_file = os.path.join(output_dir, f"{model_name}_responses.json")
-    save_responses(responses, model_name, output_file)
+    save_responses(prompts, responses, model_name, output_dir)
     return responses
 
 def load_jsonl(filename):
@@ -105,7 +111,7 @@ def get_questions():
     questions = load_jsonl("mt_bench_questions.jsonl")
     return [question['turns'][0] for question in questions]
 
-def run_all_models(output_dir="responses"):
+def run_all_models(output_dir="model_responses"):
     prompts = get_questions()
     model_names = list(existing_model_paths.keys())
     
