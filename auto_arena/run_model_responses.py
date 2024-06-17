@@ -15,7 +15,7 @@ def load_model(model_name):
 
     if os.path.exists(model_info):
         print(f"HF model detected, loading from: {model_info}")
-        vllm_model = LLM(model=model_info)
+        vllm_model = LLM(model=model_info, enforce_eager=True)  # 强制使用急切模式
         return vllm_model
 
     raise FileNotFoundError("Model path does not exist")
@@ -82,3 +82,4 @@ def run_all_models(model_names=None, output_dir="model_responses", max_new_token
 
 if __name__ == "__main__":
     fire.Fire(run_all_models)
+
