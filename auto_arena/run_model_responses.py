@@ -24,29 +24,31 @@ def load_model(model_name, device):
     if os.path.exists(model_info):
         print(f"HF model detected, loading from: {model_info}")
         tokenizer = AutoTokenizer.from_pretrained(pretrained_model_name_or_path=model_info, trust_remote_code=True)
-        if tokenizer.pad_token is None:
-            tokenizer.pad_token = tokenizer.eos_token
         print(f"Tokenizer Loaded: {type(tokenizer)}")
         model = AutoModelForCausalLM.from_pretrained(pretrained_model_name_or_path=model_info, device_map='auto', torch_dtype="auto").to(device)
         print(f"Model Loaded: {type(model)}")
 
-        return tokenizer, model
+        vllm_model = LLM(model=model)
+        return tokenizer, vllm_model
 
     raise FileNotFoundError("Model path does not exist")
 
-def run_model(prompts, tokenizer, model, device, batch_size=1):
-    responses = []
-    sampling_params = SamplingParams()  # Use default parameters
-
+def run_model(prompts, tokenizer, model, device, batch_size):
+    all_responses = []
     for i in range(0, len(prompts), batch_size):
         batch_prompts = prompts[i:i + batch_size]
-        inputs = tokenizer(batch_prompts, padding=True, return_tensors="pt").to(device)
-        outputs = model.generate(**inputs, max_new_tokens=200)
-
+        
+        sampling_params = SamplingParams(max_new_tokens=200)
+        outputs = model.generate(batch_prompts, sampling_params=sampling_params)
+        
+        batch_responses = []
         for output in outputs:
-            responses.append(tokenizer.decode(output, skip_special_tokens=True))
+            batch_responses.append(output.text)
+        
+        all_responses.extend(batch_responses)
+    
+    return all_responses
 
-    return responses
 
 def save_responses(responses, model_name, output_dir, prompt_ids):
     empty_responses = []
@@ -96,7 +98,6 @@ def run_all_models(rank, world_size, model_names, output_dir="model_responses", 
         get_responses(rank, world_size, prompts, model_name, output_dir, batch_size)
 
 def run_parallel(world_size, model_names, output_dir="model_responses", batch_size=1):
-    model_names = model_names.split(",")
     mp.spawn(run_all_models, args=(world_size, model_names, output_dir, batch_size), nprocs=world_size, join=True)
 
 if __name__ == "__main__":
