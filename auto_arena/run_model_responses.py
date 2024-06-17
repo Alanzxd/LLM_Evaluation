@@ -28,10 +28,11 @@ def load_model(model_name, device):
         model = AutoModelForCausalLM.from_pretrained(pretrained_model_name_or_path=model_info, device_map='auto', torch_dtype="auto").to(device)
         print(f"Model Loaded: {type(model)}")
 
-        vllm_model = LLM(model=model)
+        vllm_model = LLM(model=model_info)  # 传递模型路径而不是模型对象
         return tokenizer, vllm_model
 
     raise FileNotFoundError("Model path does not exist")
+
 
 def run_model(prompts, tokenizer, model, device, batch_size):
     all_responses = []
