@@ -85,7 +85,7 @@ def run_judging_trials(judge_name, n_batches = 100, batch_size = 64):
     model_names = list(existing_model_paths.keys())
     tokenizer, judge_model = load_model(judge_name) # TRY HF
     if not judge_model: # OPENAI
-        client = OpenAI(api_key="sk-proj-tJPuS2rvAEYubMXSCxfCT3BlbkFJHXnkL3PMGmNhTiMJk02V")
+        client = OpenAI(api_key="")
 
     model_pairs = []
     prompt_ids = []
