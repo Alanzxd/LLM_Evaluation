@@ -20,8 +20,9 @@ def load_model(model_name):
     if os.path.exists(model_info):
         print(f"HF model detected, loading from: {model_info}")
         tokenizer = AutoTokenizer.from_pretrained(pretrained_model_name_or_path=model_info, trust_remote_code=True)
-        print("Tokenizer Loaded; Loading Model")
+        print(f"Tokenizer Loaded: {type(tokenizer)}")
         model = AutoModelForCausalLM.from_pretrained(pretrained_model_name_or_path=model_info, device_map='auto', torch_dtype="auto")
+        print(f"Model Loaded: {type(model)}")
 
         # Convert HF model to VLLM model
         vllm_model = LLM(model_name=model_info)
@@ -76,10 +77,15 @@ def run_openai_model(prompts, model_name, client):
         responses.append(str(text))
     return responses
 
-def save_responses(responses, model_name, output_file):
-    with open(output_file, 'w') as f:
-        json.dump({model_name: responses}, f, indent=4)
-    print(f"Responses for {model_name} saved to {output_file}")
+def save_responses(responses, model_name, output_dir, prompt_id):
+    os.makedirs(output_dir, exist_ok=True)
+    for i, response in enumerate(responses):
+        output_file = os.path.join(output_dir, f"mt_bench_question_{prompt_id[i]}", f"{prompt_id[i]}|{model_name}|{uuid.uuid4()}.jsonl")
+        os.makedirs(os.path.dirname(output_file), exist_ok=True)
+        with open(output_file, 'w') as f:
+            json.dump({"response": response}, f, indent=4)
+        if response == "":
+            print(f"Empty response for {model_name} on question {prompt_id[i]}")
 
 def get_responses(prompts, model_name, output_dir="responses"):
     tokenizer, model = load_model(model_name)
@@ -93,8 +99,7 @@ def get_responses(prompts, model_name, output_dir="responses"):
     else:
         responses = run_hf_model(prompts, tokenizer, model)
 
-    output_file = os.path.join(output_dir, f"{model_name}_responses.json")
-    save_responses(responses, model_name, output_file)
+    save_responses(responses, model_name, output_dir, list(range(len(prompts))))
     return responses
 
 def load_jsonl(filename):
@@ -116,4 +121,3 @@ def run_all_models(output_dir="responses"):
 
 if __name__ == "__main__":
     fire.Fire(run_all_models)
-
