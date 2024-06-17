@@ -7,12 +7,16 @@ from vllm import LLM, SamplingParams
 from utils import existing_model_paths
 from tqdm import tqdm
 import uuid
+import openai
 
 def load_model(model_name):
     model_info = existing_model_paths.get(model_name)
 
     if not model_info:
         raise ValueError("Unsupported model")
+
+    if model_info == "OPENAI":
+        return None, None
 
     if os.path.exists(model_info):
         print(f"HF model detected, loading from: {model_info}")
@@ -37,6 +41,27 @@ def run_vllm_model(prompts, model):
     
     return responses
 
+def run_openai_model(prompts, model_name, temperature=0.7, max_tokens=1024):
+    if "3.5-turbo-0125" in model_name:
+        model_name = "gpt-3.5-turbo-0125"
+    elif "4-1106" in model_name:
+        model_name = "gpt-4-1106-preview"
+    
+    openai.api_key = os.getenv("OPENAI_API_KEY")
+    responses = []
+    for prompt in prompts:
+        completion = openai.ChatCompletion.create(
+            model=model_name,
+            messages=[
+                {"role": "user", "content": prompt}
+            ],
+            temperature=temperature,
+            max_tokens=max_tokens
+        )
+        text = completion.choices[0].message["content"].strip()
+        responses.append(text)
+    return responses
+
 def save_responses(responses, model_name, output_dir, prompt_ids):
     empty_responses = []
     for i, response in enumerate(responses):
@@ -55,9 +80,11 @@ def save_responses(responses, model_name, output_dir, prompt_ids):
             print(f"Model: {model}, Question ID: {qid}")
 
 def get_responses(prompts, model_name, output_dir="model_responses"):
-    tokenizer, model = load_model(model_name)
-
-    responses = run_vllm_model(prompts, model)
+    if model_name in ["gpt4-1106", "gpt3.5-turbo-0125"]:
+        responses = run_openai_model(prompts, model_name)
+    else:
+        tokenizer, model = load_model(model_name)
+        responses = run_vllm_model(prompts, model)
 
     save_responses(responses, model_name, output_dir, list(range(len(prompts))))
     return responses
@@ -81,4 +108,5 @@ def run_all_models(output_dir="model_responses"):
 
 if __name__ == "__main__":
     fire.Fire(run_all_models)
+
 
