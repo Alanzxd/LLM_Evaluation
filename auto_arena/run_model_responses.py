@@ -3,61 +3,59 @@ import json
 import fire
 import torch
 from transformers import AutoTokenizer, AutoModelForCausalLM
-from vllm import LLM, SamplingParams
 from utils import existing_model_paths
 from tqdm import tqdm
 import uuid
-import torch.multiprocessing as mp
-import torch.distributed as dist
 from datetime import datetime
 
-# Disable tokenizers parallelism warning
-os.environ["TOKENIZERS_PARALLELISM"] = "false"
-os.environ["PYTORCH_CUDA_ALLOC_CONF"] = "expandable_segments:True"
-
-def load_model(model_name, device):
+def load_model(model_name):
     model_info = existing_model_paths.get(model_name)
 
     if not model_info:
-        raise ValueError(f"Unsupported model: {model_name}")
+        raise ValueError("Unsupported model")
 
     if os.path.exists(model_info):
         print(f"HF model detected, loading from: {model_info}")
         tokenizer = AutoTokenizer.from_pretrained(pretrained_model_name_or_path=model_info, trust_remote_code=True)
         print(f"Tokenizer Loaded: {type(tokenizer)}")
-        model = AutoModelForCausalLM.from_pretrained(pretrained_model_name_or_path=model_info, device_map='auto', torch_dtype="auto").to(device)
+        model = AutoModelForCausalLM.from_pretrained(pretrained_model_name_or_path=model_info)
+        model.to("cuda")  # Ensure the model is moved to the GPU
         print(f"Model Loaded: {type(model)}")
-
-        vllm_model = LLM(model=model_info)  # 传递模型路径而不是模型对象
-        return tokenizer, vllm_model
+        return tokenizer, model
 
     raise FileNotFoundError("Model path does not exist")
 
+def run_model(prompts, tokenizer, model):
+    tokenizer.pad_token = tokenizer.eos_token
+    inputs = tokenizer(prompts, padding=True, return_tensors="pt").to("cuda")
 
-def run_model(prompts, tokenizer, model, device, batch_size):
-    all_responses = []
-    for i in range(0, len(prompts), batch_size):
-        batch_prompts = prompts[i:i + batch_size]
-        
-        sampling_params = SamplingParams(max_new_tokens=200)
-        outputs = model.generate(batch_prompts, sampling_params=sampling_params)
-        
-        batch_responses = []
-        for output in outputs:
-            batch_responses.append(output.text)
-        
-        all_responses.extend(batch_responses)
-    
-    return all_responses
+    try:
+        with torch.cuda.amp.autocast():
+            outputs = model.generate(**inputs, max_new_tokens=200)  # Use max_new_tokens to set the length of the generation
+    except torch.cuda.OutOfMemoryError as e:
+        print(f"CUDA OutOfMemoryError during model.generate: {e}")
+        torch.cuda.empty_cache()
+        return [""] * len(prompts)  # Return empty responses in case of an error
 
+    responses = []
+    for i in range(outputs.shape[0]):
+        full_response = tokenizer.decode(outputs[i], skip_special_tokens=True)
+        prompt_end_idx = full_response.find(prompts[i]) + len(prompts[i])
+        if prompt_end_idx > -1 and prompt_end_idx < len(full_response):
+            response = full_response[prompt_end_idx:].strip()
+        else:
+            response = full_response
+        responses.append(response)
+
+    return responses
 
 def save_responses(responses, model_name, output_dir, prompt_ids):
     empty_responses = []
     for i, response in enumerate(responses):
         prompt_id = prompt_ids[i]
+        timestamp = datetime.now().strftime('%y%m%d%H%M%S%f')[:-3]  # Generate timestamp in the desired format
         directory = os.path.join(output_dir, f"mt_bench_question_{prompt_id}")
         os.makedirs(directory, exist_ok=True)
-        timestamp = datetime.now().strftime("%y%m%d%H%M%S%f")
         output_file = os.path.join(directory, f"{prompt_id}|{model_name}|{timestamp}.jsonl")
         with open(output_file, 'w') as f:
             json.dump({"response": response}, f, indent=4)
@@ -69,11 +67,13 @@ def save_responses(responses, model_name, output_dir, prompt_ids):
         for model, qid in empty_responses:
             print(f"Model: {model}, Question ID: {qid}")
 
-def get_responses(rank, world_size, prompts, model_name, output_dir="model_responses", batch_size=1):
-    device = torch.device(f"cuda:{rank}")
-    tokenizer, model = load_model(model_name, device)
-
-    responses = run_model(prompts, tokenizer, model, device, batch_size)
+def get_responses(prompts, model_name, output_dir="model_responses"):
+    if model_name in ["gpt4-1106", "gpt3.5-turbo-0125"]:
+        print(f"Skipping model: {model_name}")
+        return []
+    else:
+        tokenizer, model = load_model(model_name)
+        responses = run_model(prompts, tokenizer, model)
 
     save_responses(responses, model_name, output_dir, list(range(len(prompts))))
     return responses
@@ -86,22 +86,16 @@ def get_questions():
     questions = load_jsonl("mt_bench_questions.jsonl")
     return [question['turns'][0] for question in questions]
 
-def run_all_models(rank, world_size, model_names, output_dir="model_responses", batch_size=1):
-    os.environ["MASTER_ADDR"] = "localhost"
-    os.environ["MASTER_PORT"] = "29500"
-    dist.init_process_group("nccl", rank=rank, world_size=world_size)
+def run_all_models(model_names=None, output_dir="model_responses"):
     prompts = get_questions()
+    if model_names is None:
+        model_names = list(existing_model_paths.keys())
     
     os.makedirs(output_dir, exist_ok=True)
     
     for model_name in tqdm(model_names):
-        print(f"Running model: {model_name} on rank: {rank}")
-        get_responses(rank, world_size, prompts, model_name, output_dir, batch_size)
-
-def run_parallel(world_size, model_names, output_dir="model_responses", batch_size=1):
-    model_names = model_names.split(",")
-    mp.spawn(run_all_models, args=(world_size, model_names, output_dir, batch_size), nprocs=world_size, join=True)
+        get_responses(prompts, model_name, output_dir)
 
 if __name__ == "__main__":
-    fire.Fire(run_parallel)
+    fire.Fire(run_all_models)
 
