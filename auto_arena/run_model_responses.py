@@ -25,13 +25,13 @@ def load_model(model_name):
 
     raise FileNotFoundError("Model path does not exist")
 
-def run_model(prompts, tokenizer, model):
+def run_model(prompts, tokenizer, model, num_beams=1):
     tokenizer.pad_token = tokenizer.eos_token
     inputs = tokenizer(prompts, padding=True, return_tensors="pt").to("cuda")
 
     try:
         with torch.cuda.amp.autocast():
-            outputs = model.generate(**inputs, max_new_tokens=200)  # Use max_new_tokens to set the length of the generation
+            outputs = model.generate(**inputs, max_new_tokens=200, num_beams=num_beams)  # Use max_new_tokens and num_beams
     except torch.cuda.OutOfMemoryError as e:
         print(f"CUDA OutOfMemoryError during model.generate: {e}")
         torch.cuda.empty_cache()
@@ -67,13 +67,13 @@ def save_responses(responses, model_name, output_dir, prompt_ids):
         for model, qid in empty_responses:
             print(f"Model: {model}, Question ID: {qid}")
 
-def get_responses(prompts, model_name, output_dir="model_responses"):
+def get_responses(prompts, model_name, output_dir="model_responses", num_beams=1):
     if model_name in ["gpt4-1106", "gpt3.5-turbo-0125"]:
         print(f"Skipping model: {model_name}")
         return []
     else:
         tokenizer, model = load_model(model_name)
-        responses = run_model(prompts, tokenizer, model)
+        responses = run_model(prompts, tokenizer, model, num_beams)
 
     save_responses(responses, model_name, output_dir, list(range(len(prompts))))
     return responses
@@ -86,16 +86,17 @@ def get_questions():
     questions = load_jsonl("mt_bench_questions.jsonl")
     return [question['turns'][0] for question in questions]
 
-def run_all_models(model_names=None, output_dir="model_responses"):
+def run_all_models(model_names=None, output_dir="model_responses", num_beams=1):
     prompts = get_questions()
     if model_names is None:
         model_names = list(existing_model_paths.keys())
+    else:
+        model_names = model_names.split(",")  # Split the string into a list of model names
     
     os.makedirs(output_dir, exist_ok=True)
     
     for model_name in tqdm(model_names):
-        get_responses(prompts, model_name, output_dir)
+        get_responses(prompts, model_name, output_dir, num_beams)
 
 if __name__ == "__main__":
     fire.Fire(run_all_models)
-
