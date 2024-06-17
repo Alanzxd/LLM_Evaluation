@@ -2,7 +2,7 @@ import os
 import json
 import fire
 import torch
-from transformers import AutoTokenizer, AutoModelForCausalLM
+from transformers import AutoTokenizer, AutoModelForCausalLM, LlamaTokenizerFast
 from vllm import LLM, SamplingParams
 from utils import existing_model_paths
 from tqdm import tqdm
@@ -19,8 +19,9 @@ def load_model(model_name, device):
     if os.path.exists(model_info):
         print(f"HF model detected, loading from: {model_info}")
         tokenizer = AutoTokenizer.from_pretrained(pretrained_model_name_or_path=model_info, trust_remote_code=True)
-        if not isinstance(tokenizer, AutoTokenizer):
-            raise TypeError(f"Loaded tokenizer is not an instance of AutoTokenizer: {type(tokenizer)}")
+        # Add check for LlamaTokenizerFast
+        if not isinstance(tokenizer, (AutoTokenizer, LlamaTokenizerFast)):
+            raise TypeError(f"Loaded tokenizer is not an instance of AutoTokenizer or LlamaTokenizerFast: {type(tokenizer)}")
         print(f"Tokenizer Loaded: {type(tokenizer)}")
         model = AutoModelForCausalLM.from_pretrained(pretrained_model_name_or_path=model_info, torch_dtype="auto")
         model.to(device)  # Move the model to the correct GPU device
@@ -30,8 +31,8 @@ def load_model(model_name, device):
     raise FileNotFoundError(f"Model path does not exist: {model_info}")
 
 def run_model(prompts, tokenizer, model, device):
-    if not isinstance(tokenizer, AutoTokenizer):
-        raise TypeError("Tokenizer is not an instance of AutoTokenizer. Ensure it is correctly initialized.")
+    if not isinstance(tokenizer, (AutoTokenizer, LlamaTokenizerFast)):
+        raise TypeError("Tokenizer is not an instance of AutoTokenizer or LlamaTokenizerFast. Ensure it is correctly initialized.")
     tokenizer.pad_token = tokenizer.eos_token
     inputs = tokenizer(prompts, padding=True, return_tensors="pt").to(device)
 
@@ -100,3 +101,4 @@ def run_parallel(world_size, model_names, output_dir="model_responses"):
 
 if __name__ == "__main__":
     fire.Fire(run_parallel)
+
