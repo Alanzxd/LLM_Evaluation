@@ -76,7 +76,7 @@ def get_responses(rank, world_size, prompts, model_name, output_dir="model_respo
     return responses
 
 def load_jsonl(filename):
-    with open(filename, 'r') as file):
+    with open(filename, 'r') as file:
         return [json.loads(line.strip()) for line in file]
 
 def get_questions():
