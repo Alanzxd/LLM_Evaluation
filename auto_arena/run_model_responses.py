@@ -34,7 +34,7 @@ def load_model(model_name, device):
 
 def run_model(prompts, tokenizer, model, device, batch_size=1):
     responses = []
-    sampling_params = SamplingParams(max_new_tokens=100)  # Reduce max_new_tokens to save memory
+    sampling_params = SamplingParams()  # Use default parameters
 
     for i in range(0, len(prompts), batch_size):
         batch_prompts = prompts[i:i + batch_size]
@@ -99,3 +99,5 @@ def run_parallel(world_size, model_names, output_dir="model_responses", batch_si
 
 if __name__ == "__main__":
     fire.Fire(run_parallel)
+
+
