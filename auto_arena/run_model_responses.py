@@ -7,7 +7,6 @@ import openai
 from vllm import LLM, SamplingParams
 from utils import existing_model_paths
 from tqdm import tqdm
-import time
 
 def load_model(model_name):
     model_info = existing_model_paths.get(model_name)
@@ -50,7 +49,6 @@ def run_hf_model(prompts, tokenizer, model):
 
     return responses
 
-
 def run_vllm_model(prompts, model):
     sampling_params = SamplingParams()
     outputs = model.generate(prompts, sampling_params=sampling_params)
@@ -78,30 +76,12 @@ def run_openai_model(prompts, model_name, client):
         responses.append(str(text))
     return responses
 
-def save_responses(prompts, responses, model_name, output_dir):
-    timestamp = int(time.time())
-    empty_responses = []
-    for i, response in enumerate(responses):
-        prompt_id = i + 1
-        directory = os.path.join(output_dir, f"mt_bench_question_{prompt_id}")
-        os.makedirs(directory, exist_ok=True)
-        filename = os.path.join(directory, f"{prompt_id}|{model_name}|{timestamp}.jsonl")
-        with open(filename, 'w') as f:
-            json.dump({'response': [response], 'prompt': prompts[i]}, f, indent=4)
-        if not response.strip():
-            empty_responses.append({
-                'prompt_id': prompt_id,
-                'model_name': model_name,
-                'timestamp': timestamp,
-                'response': response
-            })
-    if empty_responses:
-        with open(os.path.join(output_dir, 'empty_responses.jsonl'), 'a') as f:
-            for empty_response in empty_responses:
-                f.write(json.dumps(empty_response) + '\n')
-    print(f"Responses for {model_name} saved to {output_dir}")
+def save_responses(responses, model_name, output_file):
+    with open(output_file, 'w') as f:
+        json.dump({model_name: responses}, f, indent=4)
+    print(f"Responses for {model_name} saved to {output_file}")
 
-def get_responses(prompts, model_name, output_dir="model_responses"):
+def get_responses(prompts, model_name, output_dir="responses"):
     tokenizer, model = load_model(model_name)
 
     if isinstance(model, LLM):
@@ -113,7 +93,8 @@ def get_responses(prompts, model_name, output_dir="model_responses"):
     else:
         responses = run_hf_model(prompts, tokenizer, model)
 
-    save_responses(prompts, responses, model_name, output_dir)
+    output_file = os.path.join(output_dir, f"{model_name}_responses.json")
+    save_responses(responses, model_name, output_file)
     return responses
 
 def load_jsonl(filename):
@@ -124,7 +105,7 @@ def get_questions():
     questions = load_jsonl("mt_bench_questions.jsonl")
     return [question['turns'][0] for question in questions]
 
-def run_all_models(output_dir="model_responses"):
+def run_all_models(output_dir="responses"):
     prompts = get_questions()
     model_names = list(existing_model_paths.keys())
     
@@ -135,3 +116,4 @@ def run_all_models(output_dir="model_responses"):
 
 if __name__ == "__main__":
     fire.Fire(run_all_models)
+
