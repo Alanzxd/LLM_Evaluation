@@ -1,6 +1,8 @@
 import os
 import json
 import fire
+import torch
+import gc
 from vllm import LLM, SamplingParams
 from utils import existing_model_paths
 from tqdm import tqdm
@@ -56,10 +58,16 @@ def get_responses(prompts, model_name, output_dir="model_responses", max_new_tok
         responses = run_vllm_model(prompts, model, max_new_tokens)
 
     save_responses(responses, model_name, output_dir, list(range(len(prompts))))
+    
+    # 释放显存和垃圾回收
+    del model
+    torch.cuda.empty_cache()
+    gc.collect()
+    
     return responses
 
 def load_jsonl(filename):
-    with open(filename, 'r') as file:
+    with open(filename, 'r') as file):
         return [json.loads(line.strip()) for line in file]
 
 def get_questions():
