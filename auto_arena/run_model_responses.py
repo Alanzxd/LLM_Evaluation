@@ -2,15 +2,15 @@ import os
 import json
 import fire
 import torch
-import torch.distributed as dist
-import torch.multiprocessing as mp
 from transformers import AutoTokenizer, AutoModelForCausalLM
+from vllm import LLM, SamplingParams
 from utils import existing_model_paths
 from tqdm import tqdm
 import uuid
-from datetime import datetime
+import torch.distributed as dist
+import torch.multiprocessing as mp
 
-def load_model(model_name):
+def load_model(model_name, device):
     model_info = existing_model_paths.get(model_name)
 
     if not model_info:
@@ -20,24 +20,20 @@ def load_model(model_name):
         print(f"HF model detected, loading from: {model_info}")
         tokenizer = AutoTokenizer.from_pretrained(pretrained_model_name_or_path=model_info, trust_remote_code=True)
         print(f"Tokenizer Loaded: {type(tokenizer)}")
-        model = AutoModelForCausalLM.from_pretrained(pretrained_model_name_or_path=model_info)
-        model.to("cuda")  # Ensure the model is moved to the GPU
+        model = AutoModelForCausalLM.from_pretrained(pretrained_model_name_or_path=model_info, torch_dtype="auto")
+        model.to(device)  # Move the model to the correct GPU device
         print(f"Model Loaded: {type(model)}")
         return tokenizer, model
 
     raise FileNotFoundError("Model path does not exist")
 
-def run_model(prompts, tokenizer, model):
+def run_model(prompts, tokenizer, model, device):
+    if not isinstance(tokenizer, AutoTokenizer):
+        raise TypeError("Tokenizer is not an instance of AutoTokenizer. Ensure it is correctly initialized.")
     tokenizer.pad_token = tokenizer.eos_token
-    inputs = tokenizer(prompts, padding=True, return_tensors="pt").to("cuda")
+    inputs = tokenizer(prompts, padding=True, return_tensors="pt").to(device)
 
-    try:
-        with torch.cuda.amp.autocast():
-            outputs = model.generate(**inputs, max_new_tokens=200)  # Use max_new_tokens to set the length of the generation
-    except torch.cuda.OutOfMemoryError as e:
-        print(f"CUDA OutOfMemoryError during model.generate: {e}")
-        torch.cuda.empty_cache()
-        return [""] * len(prompts)  # Return empty responses in case of an error
+    outputs = model.generate(**inputs, max_new_tokens=200)  # Use max_new_tokens to set the length of the generation
 
     responses = []
     for i in range(outputs.shape[0]):
@@ -55,10 +51,9 @@ def save_responses(responses, model_name, output_dir, prompt_ids):
     empty_responses = []
     for i, response in enumerate(responses):
         prompt_id = prompt_ids[i]
-        timestamp = datetime.now().strftime('%y%m%d%H%M%S%f')[:-3]  # Generate timestamp in the desired format
         directory = os.path.join(output_dir, f"mt_bench_question_{prompt_id}")
         os.makedirs(directory, exist_ok=True)
-        output_file = os.path.join(directory, f"{prompt_id}|{model_name}|{timestamp}.jsonl")
+        output_file = os.path.join(directory, f"{prompt_id}|{model_name}|{uuid.uuid4().hex}.jsonl")
         with open(output_file, 'w') as f:
             json.dump({"response": response}, f, indent=4)
         if response.strip() == "":
@@ -69,18 +64,13 @@ def save_responses(responses, model_name, output_dir, prompt_ids):
         for model, qid in empty_responses:
             print(f"Model: {model}, Question ID: {qid}")
 
-def get_responses(rank, world_size, prompts, model_name, output_dir="model_responses"):
-    if model_name in ["gpt4-1106", "gpt3.5-turbo-0125"]:
-        print(f"Skipping model: {model_name}")
-        return []
-    else:
-        tokenizer, model = load_model(model_name)
-        model = torch.nn.parallel.DistributedDataParallel(model, device_ids=[rank])
-        dist.barrier()  # Synchronize before running the model
-        responses = run_model(prompts, tokenizer, model)
+def get_responses(rank, world_size, prompts, model_name, output_dir):
+    device = torch.device(f"cuda:{rank}")
+    tokenizer, model = load_model(model_name, device)
+
+    responses = run_model(prompts, tokenizer, model, device)
 
     save_responses(responses, model_name, output_dir, list(range(len(prompts))))
-    return responses
 
 def load_jsonl(filename):
     with open(filename, 'r') as file:
@@ -90,25 +80,17 @@ def get_questions():
     questions = load_jsonl("mt_bench_questions.jsonl")
     return [question['turns'][0] for question in questions]
 
-def run_all_models(rank, world_size, model_names=None, output_dir="model_responses"):
-    os.environ['MASTER_ADDR'] = 'localhost'
-    os.environ['MASTER_PORT'] = '12355'
-    
-    dist.init_process_group("nccl", rank=rank, world_size=world_size)
-    torch.cuda.set_device(rank)
-
+def run_all_models(rank, world_size, model_names, output_dir="model_responses"):
     prompts = get_questions()
-    if model_names is None:
-        model_names = list(existing_model_paths.keys())
+    dist.init_process_group("nccl", rank=rank, world_size=world_size)
     
-    os.makedirs(output_dir, exist_ok=True)
-    
-    for model_name in tqdm(model_names[rank::world_size]):
+    for model_name in model_names:
+        print(f"Running model: {model_name} on rank: {rank}")
         get_responses(rank, world_size, prompts, model_name, output_dir)
-
+    
     dist.destroy_process_group()
 
-def run_parallel(world_size, model_names=None, output_dir="model_responses"):
+def run_parallel(world_size, model_names, output_dir="model_responses"):
     mp.spawn(run_all_models, args=(world_size, model_names, output_dir), nprocs=world_size, join=True)
 
 if __name__ == "__main__":
