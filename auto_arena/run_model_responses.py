@@ -1,8 +1,7 @@
 import os
 import json
 import fire
-import torch
-from transformers import AutoTokenizer, AutoModelForCausalLM
+from vllm import LLM, SamplingParams
 from utils import existing_model_paths
 from tqdm import tqdm
 import uuid
@@ -16,37 +15,19 @@ def load_model(model_name):
 
     if os.path.exists(model_info):
         print(f"HF model detected, loading from: {model_info}")
-        tokenizer = AutoTokenizer.from_pretrained(pretrained_model_name_or_path=model_info, trust_remote_code=True)
-        print(f"Tokenizer Loaded: {type(tokenizer)}")
-        model = AutoModelForCausalLM.from_pretrained(pretrained_model_name_or_path=model_info)
-        model.to("cuda")  # Ensure the model is moved to the GPU
-        print(f"Model Loaded: {type(model)}")
-        return tokenizer, model
+        vllm_model = LLM(model=model_info)
+        return vllm_model
 
     raise FileNotFoundError("Model path does not exist")
 
-def run_model(prompts, tokenizer, model, num_beams=1):
-    tokenizer.pad_token = tokenizer.eos_token
-    inputs = tokenizer(prompts, padding=True, return_tensors="pt").to("cuda")
-
-    try:
-        with torch.cuda.amp.autocast():
-            outputs = model.generate(**inputs, max_new_tokens=200, num_beams=num_beams)  # Use max_new_tokens and num_beams
-    except torch.cuda.OutOfMemoryError as e:
-        print(f"CUDA OutOfMemoryError during model.generate: {e}")
-        torch.cuda.empty_cache()
-        return [""] * len(prompts)  # Return empty responses in case of an error
-
+def run_vllm_model(prompts, model, num_beams=1, max_new_tokens=200):
+    sampling_params = SamplingParams(num_beams=num_beams, max_tokens=max_new_tokens)
+    outputs = model.generate(prompts, sampling_params=sampling_params)
+    
     responses = []
-    for i in range(outputs.shape[0]):
-        full_response = tokenizer.decode(outputs[i], skip_special_tokens=True)
-        prompt_end_idx = full_response.find(prompts[i]) + len(prompts[i])
-        if prompt_end_idx > -1 and prompt_end_idx < len(full_response):
-            response = full_response[prompt_end_idx:].strip()
-        else:
-            response = full_response
-        responses.append(response)
-
+    for output in outputs:
+        responses.append(output.text)
+    
     return responses
 
 def save_responses(responses, model_name, output_dir, prompt_ids):
@@ -67,13 +48,13 @@ def save_responses(responses, model_name, output_dir, prompt_ids):
         for model, qid in empty_responses:
             print(f"Model: {model}, Question ID: {qid}")
 
-def get_responses(prompts, model_name, output_dir="model_responses", num_beams=1):
+def get_responses(prompts, model_name, output_dir="model_responses", num_beams=1, max_new_tokens=200):
     if model_name in ["gpt4-1106", "gpt3.5-turbo-0125"]:
         print(f"Skipping model: {model_name}")
         return []
     else:
-        tokenizer, model = load_model(model_name)
-        responses = run_model(prompts, tokenizer, model, num_beams)
+        model = load_model(model_name)
+        responses = run_vllm_model(prompts, model, num_beams, max_new_tokens)
 
     save_responses(responses, model_name, output_dir, list(range(len(prompts))))
     return responses
@@ -86,7 +67,7 @@ def get_questions():
     questions = load_jsonl("mt_bench_questions.jsonl")
     return [question['turns'][0] for question in questions]
 
-def run_all_models(model_names=None, output_dir="model_responses", num_beams=1):
+def run_all_models(model_names=None, output_dir="model_responses", num_beams=1, max_new_tokens=200, batch_size=1):
     prompts = get_questions()
     if model_names is None:
         model_names = list(existing_model_paths.keys())
@@ -94,9 +75,12 @@ def run_all_models(model_names=None, output_dir="model_responses", num_beams=1):
         model_names = model_names.split(",")  # Split the string into a list of model names
     
     os.makedirs(output_dir, exist_ok=True)
-    
+
     for model_name in tqdm(model_names):
-        get_responses(prompts, model_name, output_dir, num_beams)
+        for i in range(0, len(prompts), batch_size):
+            batch_prompts = prompts[i:i + batch_size]
+            get_responses(batch_prompts, model_name, output_dir, num_beams, max_new_tokens)
 
 if __name__ == "__main__":
     fire.Fire(run_all_models)
+
