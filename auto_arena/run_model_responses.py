@@ -42,6 +42,7 @@ def save_responses(responses, model_name, output_dir, prompt_ids):
         timestamp = datetime.now().strftime('%y%m%d%H%M%S%f')
         directory = os.path.join(output_dir, f"mt_bench_question_{prompt_id}")
         os.makedirs(directory, exist_ok=True)
+        print(prompt_id)
         output_file = os.path.join(directory, f"{prompt_id}|{model_name}|{timestamp}.jsonl")
         with open(output_file, 'w') as f:
             json.dump({"response": response}, f, indent=4)
@@ -53,10 +54,10 @@ def save_responses(responses, model_name, output_dir, prompt_ids):
         for model, qid in empty_responses:
             print(f"Model: {model}, Question ID: {qid}")
 
-def get_responses(prompts, prompt_ids, model_name, output_dir="model_responses", max_new_tokens=200, max_model_len=15328, gpu_memory_utilization=0.9):
+def get_responses(prompts, model_name, output_dir="model_responses", max_new_tokens=200, max_model_len=15328, gpu_memory_utilization=0.9):
     model = load_model(model_name, max_model_len, gpu_memory_utilization)
     responses = run_vllm_model(prompts, model, max_new_tokens)
-    save_responses(responses, model_name, output_dir, prompt_ids)
+    save_responses(responses, model_name, output_dir, list(range(len(prompts))))
     del model
     torch.cuda.empty_cache()
     gc.collect()
@@ -68,12 +69,10 @@ def load_jsonl(filename):
 
 def get_questions():
     questions = load_jsonl("mt_bench_questions.jsonl")
-    prompts = [question['turns'][0] for question in questions]
-    prompt_ids = [question['question_id'] for question in questions]
-    return prompts, prompt_ids
+    return [question['turns'][0] for question in questions]
 
 def run_all_models(output_dir="model_responses", model_names="mistral-7b-instruct-2", max_new_tokens=200, batch_size=1, max_model_len=15328, gpu_memory_utilization=0.9):
-    prompts, prompt_ids = get_questions()
+    prompts = get_questions()
     model_names = model_names.split(',')
     
     os.makedirs(output_dir, exist_ok=True)
@@ -83,8 +82,8 @@ def run_all_models(output_dir="model_responses", model_names="mistral-7b-instruc
         num_batches = (len(prompts) + batch_size - 1) // batch_size
         for i in range(num_batches):
             batch_prompts = prompts[i * batch_size : (i + 1) * batch_size]
-            batch_prompt_ids = prompt_ids[i * batch_size : (i + 1) * batch_size]
-            get_responses(batch_prompts, batch_prompt_ids, model_name, output_dir, max_new_tokens, max_model_len, gpu_memory_utilization)
+            get_responses(batch_prompts, model_name, output_dir, max_new_tokens, max_model_len, gpu_memory_utilization)
 
 if __name__ == "__main__":
     fire.Fire(run_all_models)
+
