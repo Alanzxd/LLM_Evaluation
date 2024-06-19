@@ -24,12 +24,13 @@ def load_model(model_name):
 
     raise FileNotFoundError("Model path does not exist")
 
-def run_vllm_model(prompts, model, max_new_tokens, temperature, top_p, top_k):
+def run_vllm_model(prompts, model, max_new_tokens, temperature, top_p, top_k, repetition_penalty):
     sampling_params = SamplingParams(
         max_tokens=max_new_tokens, 
         temperature=temperature, 
         top_p=top_p, 
-        top_k=top_k
+        top_k=top_k,
+        repetition_penalty=repetition_penalty
     )
     outputs = model.generate(prompts, sampling_params=sampling_params)
     
@@ -50,19 +51,37 @@ def save_responses(responses, model_name, output_dir, prompt_ids, prompts):
         with open(output_file, 'w') as f:
             json.dump({"response": response}, f, indent=4)
         if response.strip() == "":
-            empty_responses.append((model_name, prompt_id, prompts[i], response))
+            empty_responses.append((model_name, prompt_id, prompts[i]))
 
     if empty_responses:
         print("Empty responses detected for the following model and question IDs:")
-        for model, qid, prompt, response in empty_responses:
+        for model, qid, prompt in empty_responses:
             print(f"Model: {model}, Question ID: {qid}")
             print(f"Prompt: {prompt}")
-            print(f"Response: {response}")
 
-def get_responses(prompts, model_name, output_dir="model_responses", max_new_tokens=200, temperature=0.7, top_p=0.95, top_k=40):
+    return empty_responses
+
+def re_prompt_empty_responses(empty_responses, model, max_new_tokens, temperature, top_p, top_k, repetition_penalty):
+    new_prompts = [f"Briefly explain: {prompt}" for model, qid, prompt in empty_responses]
+    new_responses = run_vllm_model(new_prompts, model, max_new_tokens, temperature, top_p, top_k, repetition_penalty)
+    
+    for i, (model, qid, prompt) in enumerate(empty_responses):
+        if new_responses[i].strip() == "":
+            print(f"Still empty response for Model: {model}, Question ID: {qid}")
+        else:
+            print(f"Filled empty response for Model: {model}, Question ID: {qid}")
+    
+    return new_responses
+
+def get_responses(prompts, model_name, output_dir="model_responses", max_new_tokens=200, temperature=0.7, top_p=0.95, top_k=40, repetition_penalty=1.0):
     model = load_model(model_name)
-    responses = run_vllm_model(prompts, model, max_new_tokens, temperature, top_p, top_k)
-    save_responses(responses, model_name, output_dir, list(range(len(prompts))), prompts)
+    responses = run_vllm_model(prompts, model, max_new_tokens, temperature, top_p, top_k, repetition_penalty)
+    empty_responses = save_responses(responses, model_name, output_dir, list(range(len(prompts))), prompts)
+
+    if empty_responses:
+        new_responses = re_prompt_empty_responses(empty_responses, model, max_new_tokens, temperature, top_p, top_k, repetition_penalty)
+        save_responses(new_responses, model_name, output_dir, [qid for _, qid, _ in empty_responses], [prompt for _, _, prompt in empty_responses])
+
     del model
     torch.cuda.empty_cache()
     gc.collect()
@@ -76,7 +95,7 @@ def get_questions():
     questions = load_jsonl("mt_bench_questions.jsonl")
     return [question['turns'][0] for question in questions]
 
-def run_all_models(output_dir="model_responses", model_names="vicuna-33b", max_new_tokens=200, batch_size=1, temperature=0.7, top_p=0.95, top_k=40):
+def run_all_models(output_dir="model_responses", model_names="vicuna-33b", max_new_tokens=200, batch_size=1, temperature=0.7, top_p=0.95, top_k=1, repetition_penalty=1.0):
     prompts = get_questions()
     model_names = model_names.split(',')
     
@@ -87,7 +106,7 @@ def run_all_models(output_dir="model_responses", model_names="vicuna-33b", max_n
         num_batches = (len(prompts) + batch_size - 1) // batch_size
         for i in range(num_batches):
             batch_prompts = prompts[i * batch_size : (i + 1) * batch_size]
-            get_responses(batch_prompts, model_name, output_dir, max_new_tokens, temperature, top_p, top_k)
+            get_responses(batch_prompts, model_name, output_dir, max_new_tokens, temperature, top_p, top_k, repetition_penalty)
 
 if __name__ == "__main__":
     fire.Fire(run_all_models)
