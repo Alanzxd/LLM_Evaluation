@@ -73,8 +73,7 @@ def re_prompt_empty_responses(empty_responses, model, max_new_tokens, temperatur
 
     return new_responses
 
-def get_responses(prompts, model_name, output_dir="model_responses", max_new_tokens=200, temperature=0.7, top_p=0.95, top_k=40, repetition_penalty=1.0):
-    model = load_model(model_name)
+def get_responses(prompts, model, model_name, output_dir="model_responses", max_new_tokens=200, temperature=0.7, top_p=0.95, top_k=40, repetition_penalty=1.0):
     responses = run_vllm_model(prompts, model, max_new_tokens, temperature, top_p, top_k, repetition_penalty)
     empty_responses = save_responses(responses, model_name, output_dir, list(range(len(prompts))), prompts)
 
@@ -82,9 +81,6 @@ def get_responses(prompts, model_name, output_dir="model_responses", max_new_tok
         new_responses = re_prompt_empty_responses(empty_responses, model, max_new_tokens, temperature, top_p, top_k, repetition_penalty)
         save_responses(new_responses, model_name, output_dir, [qid for _, qid, _ in empty_responses], [prompt for _, _, prompt in empty_responses])
 
-    del model
-    torch.cuda.empty_cache()
-    gc.collect()
     return responses
 
 def load_jsonl(filename):
@@ -103,12 +99,17 @@ def run_all_models(output_dir="model_responses", model_names="vicuna-33b", max_n
 
     for model_name in tqdm(model_names):
         print(f"Processing model: {model_name}")
+        model = load_model(model_name)
         num_batches = (len(prompts) + batch_size - 1) // batch_size
         for i in range(num_batches):
             batch_prompts = prompts[i * batch_size : (i + 1) * batch_size]
-            get_responses(batch_prompts, model_name, output_dir, max_new_tokens, temperature, top_p, top_k, repetition_penalty)
+            get_responses(batch_prompts, model, model_name, output_dir, max_new_tokens, temperature, top_p, top_k, repetition_penalty)
+        
+        torch.cuda.empty_cache()
+        gc.collect()
 
 if __name__ == "__main__":
     fire.Fire(run_all_models)
+
 
 
