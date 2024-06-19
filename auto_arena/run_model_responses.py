@@ -62,15 +62,15 @@ def save_responses(responses, model_name, output_dir, prompt_ids, prompts):
     return empty_responses
 
 def re_prompt_empty_responses(empty_responses, model, max_new_tokens, temperature, top_p, top_k, repetition_penalty):
-    new_prompts = [f"Briefly explain: {prompt}" for model, qid, prompt in empty_responses]
+    new_prompts = [f"Do not give me an empty response. Answer in less than 100 words: {prompt}" for model, qid, prompt in empty_responses]
     new_responses = run_vllm_model(new_prompts, model, max_new_tokens, temperature, top_p, top_k, repetition_penalty)
     
     for i, (model, qid, prompt) in enumerate(empty_responses):
-        if new_responses[i].strip() == "":
-            print(f"Still empty response for Model: {model}, Question ID: {qid}")
-        else:
-            print(f"Filled empty response for Model: {model}, Question ID: {qid}")
-    
+        while new_responses[i].strip() == "":
+            print(f"Retrying empty response for Model: {model}, Question ID: {qid}")
+            new_response = run_vllm_model([new_prompts[i]], model, max_new_tokens, temperature, top_p, top_k, repetition_penalty)[0]
+            new_responses[i] = new_response
+
     return new_responses
 
 def get_responses(prompts, model_name, output_dir="model_responses", max_new_tokens=200, temperature=0.7, top_p=0.95, top_k=40, repetition_penalty=1.0):
@@ -110,5 +110,4 @@ def run_all_models(output_dir="model_responses", model_names="vicuna-33b", max_n
 
 if __name__ == "__main__":
     fire.Fire(run_all_models)
-
 
