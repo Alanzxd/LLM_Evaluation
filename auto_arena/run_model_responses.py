@@ -63,13 +63,15 @@ def save_responses(responses, model_name, output_dir, prompt_ids, prompts):
 
 def re_prompt_empty_responses(empty_responses, model, max_new_tokens, temperature, top_p, top_k, repetition_penalty):
     new_prompts = [f"Please provide a brief answer and do not leave it empty. {prompt}" for model, qid, prompt in empty_responses]
-    new_responses = run_vllm_model(new_prompts, model, max_new_tokens, temperature, top_p, top_k, repetition_penalty)
+    new_responses = []
     
-    for i, (model, qid, prompt) in enumerate(empty_responses):
-        while new_responses[i].strip() == "":
-            print(f"Retrying empty response for Model: {model}, Question ID: {qid}")
-            new_response = run_vllm_model([new_prompts[i]], model, max_new_tokens, temperature, top_p, top_k, repetition_penalty)[0]
-            new_responses[i] = new_response
+    for i in range(len(empty_responses)):
+        model_name, qid, prompt = empty_responses[i]
+        response = ""
+        while response.strip() == "":
+            print(f"Retrying empty response for Model: {model_name}, Question ID: {qid}")
+            response = run_vllm_model([new_prompts[i]], model, max_new_tokens, temperature, top_p, top_k, repetition_penalty)[0]
+        new_responses.append(response)
 
     return new_responses
 
