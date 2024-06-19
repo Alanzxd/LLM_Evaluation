@@ -50,13 +50,14 @@ def save_responses(responses, model_name, output_dir, prompt_ids, prompts):
         with open(output_file, 'w') as f:
             json.dump({"response": response}, f, indent=4)
         if response.strip() == "":
-            empty_responses.append((model_name, prompt_id, prompts[i]))
+            empty_responses.append((model_name, prompt_id, prompts[i], response))
 
     if empty_responses:
         print("Empty responses detected for the following model and question IDs:")
-        for model, qid, prompt in empty_responses:
+        for model, qid, prompt, response in empty_responses:
             print(f"Model: {model}, Question ID: {qid}")
             print(f"Prompt: {prompt}")
+            print(f"Response: {response}")
 
 def get_responses(prompts, model_name, output_dir="model_responses", max_new_tokens=200, temperature=0.7, top_p=0.95, top_k=40):
     model = load_model(model_name)
@@ -90,4 +91,5 @@ def run_all_models(output_dir="model_responses", model_names="vicuna-33b", max_n
 
 if __name__ == "__main__":
     fire.Fire(run_all_models)
+
 
