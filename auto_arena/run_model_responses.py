@@ -24,13 +24,12 @@ def load_model(model_name):
 
     raise FileNotFoundError("Model path does not exist")
 
-def run_vllm_model(prompts, model, max_new_tokens, temperature, top_p, top_k, eos_token_id):
+def run_vllm_model(prompts, model, max_new_tokens, temperature, top_p, top_k):
     sampling_params = SamplingParams(
         max_tokens=max_new_tokens, 
         temperature=temperature, 
         top_p=top_p, 
-        top_k=top_k,
-        eos_token_id=eos_token_id
+        top_k=top_k
     )
     outputs = model.generate(prompts, sampling_params=sampling_params)
     
@@ -59,9 +58,9 @@ def save_responses(responses, model_name, output_dir, prompt_ids, prompts):
             print(f"Model: {model}, Question ID: {qid}")
             print(f"Prompt: {prompt}")
 
-def get_responses(prompts, model_name, output_dir="model_responses", max_new_tokens=200, temperature=0.7, top_p=0.95, top_k=40, eos_token_id=None):
+def get_responses(prompts, model_name, output_dir="model_responses", max_new_tokens=200, temperature=0.7, top_p=0.95, top_k=40):
     model = load_model(model_name)
-    responses = run_vllm_model(prompts, model, max_new_tokens, temperature, top_p, top_k, eos_token_id)
+    responses = run_vllm_model(prompts, model, max_new_tokens, temperature, top_p, top_k)
     save_responses(responses, model_name, output_dir, list(range(len(prompts))), prompts)
     del model
     torch.cuda.empty_cache()
@@ -76,7 +75,7 @@ def get_questions():
     questions = load_jsonl("mt_bench_questions.jsonl")
     return [question['turns'][0] for question in questions]
 
-def run_all_models(output_dir="model_responses", model_names="mistral-7b-instruct-2", max_new_tokens=200, batch_size=1, temperature=0.7, top_p=0.95, top_k=40, eos_token_id=None):
+def run_all_models(output_dir="model_responses", model_names="vicuna-33b", max_new_tokens=200, batch_size=1, temperature=0.7, top_p=0.95, top_k=40):
     prompts = get_questions()
     model_names = model_names.split(',')
     
@@ -87,7 +86,8 @@ def run_all_models(output_dir="model_responses", model_names="mistral-7b-instruc
         num_batches = (len(prompts) + batch_size - 1) // batch_size
         for i in range(num_batches):
             batch_prompts = prompts[i * batch_size : (i + 1) * batch_size]
-            get_responses(batch_prompts, model_name, output_dir, max_new_tokens, temperature, top_p, top_k, eos_token_id)
+            get_responses(batch_prompts, model_name, output_dir, max_new_tokens, temperature, top_p, top_k)
 
 if __name__ == "__main__":
     fire.Fire(run_all_models)
+
