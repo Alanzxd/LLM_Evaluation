@@ -70,8 +70,8 @@ def re_prompt_empty_responses(empty_responses, model, max_new_tokens, temperatur
         response = ""
         print(f"Retrying empty response for Model: {model_name}, Question ID: {qid}")
         response = run_vllm_model([new_prompts[i]], model, max_new_tokens, temperature, top_p, top_k, repetition_penalty)[0]
-        if response='':
-            print('Question ID: {qid} still empty')
+        if response="":
+            print("Question ID: {qid} still empty")
         new_responses.append(response)
 
     return new_responses
