@@ -62,7 +62,7 @@ def save_responses(responses, model_name, output_dir, prompt_ids, prompts):
     return empty_responses
 
 def re_prompt_empty_responses(empty_responses, model, max_new_tokens, temperature, top_p, top_k, repetition_penalty):
-    new_prompts = [f"Provide an answer in 50 words and do not leave it empty! {prompt}" for model, qid, prompt in empty_responses]
+    new_prompts = [f"Based on the passage: {prompt}. Let’s think step by step." for model, qid, prompt in empty_responses]
     new_responses = []
     
     for i in range(len(empty_responses)):
