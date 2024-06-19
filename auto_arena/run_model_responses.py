@@ -62,7 +62,7 @@ def save_responses(responses, model_name, output_dir, prompt_ids, prompts):
     return empty_responses
 
 def re_prompt_empty_responses(empty_responses, model, max_new_tokens, temperature, top_p, top_k, repetition_penalty):
-    new_prompts = [f"Do not give me an empty response. Answer in less than 100 words: {prompt}" for model, qid, prompt in empty_responses]
+    new_prompts = [f"Please provide a brief answer and do not leave it empty. {prompt}" for model, qid, prompt in empty_responses]
     new_responses = run_vllm_model(new_prompts, model, max_new_tokens, temperature, top_p, top_k, repetition_penalty)
     
     for i, (model, qid, prompt) in enumerate(empty_responses):
@@ -81,6 +81,9 @@ def get_responses(prompts, model, model_name, output_dir="model_responses", max_
         new_responses = re_prompt_empty_responses(empty_responses, model, max_new_tokens, temperature, top_p, top_k, repetition_penalty)
         save_responses(new_responses, model_name, output_dir, [qid for _, qid, _ in empty_responses], [prompt for _, _, prompt in empty_responses])
 
+    del model
+    torch.cuda.empty_cache()
+    gc.collect()
     return responses
 
 def load_jsonl(filename):
@@ -104,7 +107,7 @@ def run_all_models(output_dir="model_responses", model_names="vicuna-33b", max_n
         for i in range(num_batches):
             batch_prompts = prompts[i * batch_size : (i + 1) * batch_size]
             get_responses(batch_prompts, model, model_name, output_dir, max_new_tokens, temperature, top_p, top_k, repetition_penalty)
-        
+        del model
         torch.cuda.empty_cache()
         gc.collect()
 
