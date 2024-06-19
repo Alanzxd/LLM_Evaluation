@@ -8,10 +8,8 @@ from utils import existing_model_paths
 from tqdm import tqdm
 from datetime import datetime
 
-# 禁用 Tokenizers 并行处理的警告
+# Disable Tokenizers parallelism warning
 os.environ["TOKENIZERS_PARALLELISM"] = "false"
-
-EOS_TOKEN = "<|endoftext|>"  # Define the EOS token if needed
 
 def load_model(model_name):
     model_info = existing_model_paths.get(model_name)
@@ -21,30 +19,28 @@ def load_model(model_name):
 
     if os.path.exists(model_info):
         print(f"HF model detected, loading from: {model_info}")
-        vllm_model = LLM(model=model_info, gpu_memory_utilization=0.9)
+        vllm_model = LLM(model=model_info)
         return vllm_model
 
     raise FileNotFoundError("Model path does not exist")
 
-def get_sampling_params(model_name, max_new_tokens, temperature, top_p):
-    # Default hyperparameters for different models
-    if "qwen1.5" in model_name or "vicuna" in model_name:
-        return SamplingParams(temperature=temperature, top_p=top_p, max_tokens=max_new_tokens)
-    else:
-        return SamplingParams(max_tokens=max_new_tokens)
-
-def format_prompt(prompt):
-    return f"{prompt} {EOS_TOKEN}"
-
-def run_vllm_model(prompts, model, sampling_params):
-    formatted_prompts = [format_prompt(prompt) for prompt in prompts]
-    outputs = model.generate(formatted_prompts, sampling_params=sampling_params)
+def run_vllm_model(prompts, model, max_new_tokens, temperature, top_p, top_k, eos_token_id):
+    sampling_params = SamplingParams(
+        max_tokens=max_new_tokens, 
+        temperature=temperature, 
+        top_p=top_p, 
+        top_k=top_k,
+        eos_token_id=eos_token_id
+    )
+    outputs = model.generate(prompts, sampling_params=sampling_params)
+    
     responses = []
     for output in outputs:
         responses.append(output.outputs[0].text)
+    
     return responses
 
-def save_responses(responses, model_name, output_dir, prompt_ids):
+def save_responses(responses, model_name, output_dir, prompt_ids, prompts):
     empty_responses = []
     for i, response in enumerate(responses):
         prompt_id = prompt_ids[i]
@@ -55,18 +51,18 @@ def save_responses(responses, model_name, output_dir, prompt_ids):
         with open(output_file, 'w') as f:
             json.dump({"response": response}, f, indent=4)
         if response.strip() == "":
-            empty_responses.append((model_name, prompt_id))
+            empty_responses.append((model_name, prompt_id, prompts[i]))
 
     if empty_responses:
         print("Empty responses detected for the following model and question IDs:")
-        for model, qid in empty_responses:
+        for model, qid, prompt in empty_responses:
             print(f"Model: {model}, Question ID: {qid}")
+            print(f"Prompt: {prompt}")
 
-def get_responses(prompts, model_name, output_dir="model_responses", max_new_tokens=200, temperature=0.7, top_p=0.9):
+def get_responses(prompts, model_name, output_dir="model_responses", max_new_tokens=200, temperature=0.7, top_p=0.95, top_k=40, eos_token_id=None):
     model = load_model(model_name)
-    sampling_params = get_sampling_params(model_name, max_new_tokens, temperature, top_p)
-    responses = run_vllm_model(prompts, model, sampling_params)
-    save_responses(responses, model_name, output_dir, list(range(len(prompts))))
+    responses = run_vllm_model(prompts, model, max_new_tokens, temperature, top_p, top_k, eos_token_id)
+    save_responses(responses, model_name, output_dir, list(range(len(prompts))), prompts)
     del model
     torch.cuda.empty_cache()
     gc.collect()
@@ -80,7 +76,7 @@ def get_questions():
     questions = load_jsonl("mt_bench_questions.jsonl")
     return [question['turns'][0] for question in questions]
 
-def run_all_models(output_dir="model_responses", model_names="mistral-7b-instruct-2", max_new_tokens=200, batch_size=1, temperature=0.7, top_p=0.9):
+def run_all_models(output_dir="model_responses", model_names="mistral-7b-instruct-2", max_new_tokens=200, batch_size=1, temperature=0.7, top_p=0.95, top_k=40, eos_token_id=None):
     prompts = get_questions()
     model_names = model_names.split(',')
     
@@ -91,7 +87,7 @@ def run_all_models(output_dir="model_responses", model_names="mistral-7b-instruc
         num_batches = (len(prompts) + batch_size - 1) // batch_size
         for i in range(num_batches):
             batch_prompts = prompts[i * batch_size : (i + 1) * batch_size]
-            get_responses(batch_prompts, model_name, output_dir, max_new_tokens, temperature, top_p)
+            get_responses(batch_prompts, model_name, output_dir, max_new_tokens, temperature, top_p, top_k, eos_token_id)
 
 if __name__ == "__main__":
     fire.Fire(run_all_models)
