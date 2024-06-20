@@ -70,7 +70,7 @@ def save_responses(responses, model_name, output_dir, prompt_ids, prompts, quest
         timestamp = datetime.now().strftime('%y%m%d%H%M%S%f')
         directory = os.path.join(output_dir, f"mt_bench_question_{question_id}")
         os.makedirs(directory, exist_ok=True)
-        output_file = os.path.join(directory, f"{prompt_id}|{model_name}|{timestamp}.jsonl")
+        output_file = os.path.join(directory, f"{question_id}|{model_name}|{timestamp}.jsonl")
         with open(output_file, 'w') as f:
             json.dump({"response": response}, f, indent=4)
         if response.strip() == "":
