@@ -65,7 +65,7 @@ def run_vllm_model(prompts, model, model_name, max_new_tokens, top_k, gpu_memory
 def save_responses(responses, model_name, output_dir, prompt_ids, prompts):
     empty_responses = []
     for i, response in enumerate(responses):
-        prompt_id = prompt_ids[i]+80
+        prompt_id = prompt_ids[i]
         timestamp = datetime.now().strftime('%y%m%d%H%M%S%f')
         directory = os.path.join(output_dir, f"mt_bench_question_{prompt_id}")
         os.makedirs(directory, exist_ok=True)
@@ -118,10 +118,13 @@ def load_jsonl(filename):
 
 def get_questions():
     questions = load_jsonl("mt_bench_questions.jsonl")
-    return [question['turns'][0] for question in questions]
+    question_map = {question['question_id']: question['turns'][0] for question in questions}
+    return question_map
 
 def run_all_models(output_dir="model_responses", model_names="vicuna-33b,qwen-1.5-32b-chat", max_new_tokens=200, batch_size=1, top_k=40, gpu_memory_utilization=0.9):
-    prompts = get_questions()
+    question_map = get_questions()
+    prompts = list(question_map.values())
+    question_ids = list(question_map.keys())
     model_names = model_names.split(',')
     
     os.makedirs(output_dir, exist_ok=True)
@@ -132,6 +135,7 @@ def run_all_models(output_dir="model_responses", model_names="vicuna-33b,qwen-1.
         num_batches = (len(prompts) + batch_size - 1) // batch_size
         for i in range(num_batches):
             batch_prompts = prompts[i * batch_size : (i + 1) * batch_size]
+            batch_question_ids = question_ids[i * batch_size : (i + 1) * batch_size]
             get_responses(batch_prompts, model, model_name, output_dir, max_new_tokens, top_k, gpu_memory_utilization)
         del model
         torch.cuda.empty_cache()
@@ -139,3 +143,4 @@ def run_all_models(output_dir="model_responses", model_names="vicuna-33b,qwen-1.
 
 if __name__ == "__main__":
     fire.Fire(run_all_models)
+
