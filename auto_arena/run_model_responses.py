@@ -100,9 +100,9 @@ def re_prompt_empty_responses(empty_responses, model, model_name, max_new_tokens
 
     return new_responses
 
-def get_responses(prompts, model, model_name, output_dir="model_responses", max_new_tokens=200, top_k=40, gpu_memory_utilization=0.9):
+def get_responses(prompts, question_ids, model, model_name, output_dir="model_responses", max_new_tokens=200, top_k=40, gpu_memory_utilization=0.9):
     responses = run_vllm_model(prompts, model, model_name, max_new_tokens, top_k, gpu_memory_utilization)
-    empty_responses = save_responses(responses, model_name, output_dir, list(range(len(prompts))), prompts, list(range(len(prompts))))
+    empty_responses = save_responses(responses, model_name, output_dir, list(range(len(prompts))), prompts, question_ids)
 
     if empty_responses:
         new_responses = re_prompt_empty_responses(empty_responses, model, model_name, max_new_tokens, top_k, gpu_memory_utilization)
@@ -137,13 +137,12 @@ def run_all_models(output_dir="model_responses", model_names="vicuna-33b,qwen-1.
         for i in range(num_batches):
             batch_prompts = prompts[i * batch_size : (i + 1) * batch_size]
             batch_question_ids = question_ids[i * batch_size : (i + 1) * batch_size]
-            get_responses(batch_prompts, model, model_name, output_dir, max_new_tokens, top_k, gpu_memory_utilization)
+            get_responses(batch_prompts, batch_question_ids, model, model_name, output_dir, max_new_tokens, top_k, gpu_memory_utilization)
         del model
         torch.cuda.empty_cache()
         gc.collect()
 
 if __name__ == "__main__":
     fire.Fire(run_all_models)
-
 
 
