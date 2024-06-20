@@ -62,18 +62,19 @@ def run_vllm_model(prompts, model, model_name, max_new_tokens, top_k, gpu_memory
     
     return responses
 
-def save_responses(responses, model_name, output_dir, prompt_ids, prompts):
+def save_responses(responses, model_name, output_dir, prompt_ids, prompts, question_ids):
     empty_responses = []
     for i, response in enumerate(responses):
+        question_id = question_ids[i]
         prompt_id = prompt_ids[i]
         timestamp = datetime.now().strftime('%y%m%d%H%M%S%f')
-        directory = os.path.join(output_dir, f"mt_bench_question_{prompt_id}")
+        directory = os.path.join(output_dir, f"mt_bench_question_{question_id}")
         os.makedirs(directory, exist_ok=True)
         output_file = os.path.join(directory, f"{prompt_id}|{model_name}|{timestamp}.jsonl")
         with open(output_file, 'w') as f:
             json.dump({"response": response}, f, indent=4)
         if response.strip() == "":
-            empty_responses.append((model_name, prompt_id, prompts[i]))
+            empty_responses.append((model_name, question_id, prompts[i]))
 
     if empty_responses:
         print("Empty responses detected for the following model and question IDs:")
@@ -101,11 +102,11 @@ def re_prompt_empty_responses(empty_responses, model, model_name, max_new_tokens
 
 def get_responses(prompts, model, model_name, output_dir="model_responses", max_new_tokens=200, top_k=40, gpu_memory_utilization=0.9):
     responses = run_vllm_model(prompts, model, model_name, max_new_tokens, top_k, gpu_memory_utilization)
-    empty_responses = save_responses(responses, model_name, output_dir, list(range(len(prompts))), prompts)
+    empty_responses = save_responses(responses, model_name, output_dir, list(range(len(prompts))), prompts, list(range(len(prompts))))
 
     if empty_responses:
         new_responses = re_prompt_empty_responses(empty_responses, model, model_name, max_new_tokens, top_k, gpu_memory_utilization)
-        save_responses(new_responses, model_name, output_dir, [qid for _, qid, _ in empty_responses], [prompt for _, _, prompt in empty_responses])
+        save_responses(new_responses, model_name, output_dir, [qid for _, qid, _ in empty_responses], [prompt for _, _, prompt in empty_responses], [qid for _, qid, _ in empty_responses])
 
     del model
     torch.cuda.empty_cache()
@@ -143,5 +144,6 @@ def run_all_models(output_dir="model_responses", model_names="vicuna-33b,qwen-1.
 
 if __name__ == "__main__":
     fire.Fire(run_all_models)
+
 
 
