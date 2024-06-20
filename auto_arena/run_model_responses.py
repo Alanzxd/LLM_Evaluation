@@ -25,10 +25,16 @@ def load_model(model_name, gpu_memory_utilization=0.9, tensor_parallel_size=1):
 
     raise FileNotFoundError("Model path does not exist")
 
-def format_prompt(model_name, prompt):
+def load_tokenizer(model_name):
+    if "qwen" in model_name.lower():
+        tokenizer = AutoTokenizer.from_pretrained("Qwen/Qwen1.5-32B-Chat")
+        return tokenizer
+    return None
+
+def format_prompt(model_name, prompt, tokenizer=None):
     if "vicuna" in model_name.lower():
         return f"A chat between a curious user and an artificial intelligence assistant. The assistant gives helpful, detailed, and polite answers to the user's questions. USER: {prompt} ASSISTANT:"
-    elif "qwen" in model_name.lower():
+    elif "qwen" in model_name.lower() and tokenizer:
         messages = [
             {"role": "system", "content": "You are a helpful assistant."},
             {"role": "user", "content": prompt}
@@ -42,7 +48,8 @@ def format_prompt(model_name, prompt):
     return prompt
 
 def run_vllm_model(prompts, model, model_name, max_new_tokens, top_k, gpu_memory_utilization):
-    formatted_prompts = [format_prompt(model_name, prompt) for prompt in prompts]
+    tokenizer = load_tokenizer(model_name)
+    formatted_prompts = [format_prompt(model_name, prompt, tokenizer) for prompt in prompts]
     sampling_params = SamplingParams(
         max_tokens=max_new_tokens,
         top_k=top_k
@@ -132,5 +139,3 @@ def run_all_models(output_dir="model_responses", model_names="vicuna-33b,qwen-1.
 
 if __name__ == "__main__":
     fire.Fire(run_all_models)
-
-
