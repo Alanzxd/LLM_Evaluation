@@ -144,3 +144,4 @@ def run_all_models(output_dir="model_responses", model_names="vicuna-33b,qwen-1.
 if __name__ == "__main__":
     fire.Fire(run_all_models)
 
+
