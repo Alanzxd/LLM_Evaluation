@@ -117,7 +117,7 @@ def run_all_models(output_dir="model_responses", model_names="vicuna-33b", max_n
         for i in range(num_batches):
             batch_prompts = prompts[i * batch_size : (i + 1) * batch_size]
             get_responses(batch_prompts, model, model_name, output_dir, max_new_tokens, temperature, top_p, top_k, repetition_penalty)
-        del model
+        
         torch.cuda.empty_cache()
         gc.collect()
 
