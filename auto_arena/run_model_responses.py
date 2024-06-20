@@ -24,7 +24,13 @@ def load_model(model_name):
 
     raise FileNotFoundError("Model path does not exist")
 
-def run_vllm_model(prompts, model, max_new_tokens, temperature, top_p, top_k, repetition_penalty):
+def format_prompt(model_name, prompt):
+    if "vicuna" in model_name.lower():
+        return f"A chat between a curious user and an artificial intelligence assistant. The assistant gives helpful, detailed, and polite answers to the user's questions. USER: {prompt} ASSISTANT:"
+    return prompt
+
+def run_vllm_model(prompts, model, model_name, max_new_tokens, temperature, top_p, top_k, repetition_penalty):
+    formatted_prompts = [format_prompt(model_name, prompt) for prompt in prompts]
     sampling_params = SamplingParams(
         max_tokens=max_new_tokens, 
         temperature=temperature, 
@@ -32,7 +38,7 @@ def run_vllm_model(prompts, model, max_new_tokens, temperature, top_p, top_k, re
         top_k=top_k,
         repetition_penalty=repetition_penalty
     )
-    outputs = model.generate(prompts, sampling_params=sampling_params)
+    outputs = model.generate(formatted_prompts, sampling_params=sampling_params)
     
     responses = []
     for output in outputs:
@@ -61,27 +67,28 @@ def save_responses(responses, model_name, output_dir, prompt_ids, prompts):
 
     return empty_responses
 
-def re_prompt_empty_responses(empty_responses, model, max_new_tokens, temperature, top_p, top_k, repetition_penalty):
-    new_prompts = [f"Based on the passage: {prompt}. Let’s think step by step." for model, qid, prompt in empty_responses]
+def re_prompt_empty_responses(empty_responses, model, model_name, max_new_tokens, temperature, top_p, top_k, repetition_penalty, max_attempts=5):
+    new_prompts = [f"Please provide a brief answer and do not leave it empty. {prompt}" for model, qid, prompt in empty_responses]
     new_responses = []
     
     for i in range(len(empty_responses)):
         model_name, qid, prompt = empty_responses[i]
         response = ""
-        print(f"Retrying empty response for Model: {model_name}, Question ID: {qid}")
-        response = run_vllm_model([new_prompts[i]], model, max_new_tokens, temperature, top_p, top_k, repetition_penalty)[0]
-        if response="":
-            print("Question ID: {qid} still empty")
+        attempts = 0
+        while response.strip() == "" and attempts < max_attempts:
+            print(f"Retrying empty response for Model: {model_name}, Question ID: {qid}, Attempt: {attempts + 1}")
+            response = run_vllm_model([new_prompts[i]], model, model_name, max_new_tokens, temperature, top_p, top_k, repetition_penalty)[0]
+            attempts += 1
         new_responses.append(response)
 
     return new_responses
 
 def get_responses(prompts, model, model_name, output_dir="model_responses", max_new_tokens=200, temperature=0.7, top_p=0.95, top_k=40, repetition_penalty=1.0):
-    responses = run_vllm_model(prompts, model, max_new_tokens, temperature, top_p, top_k, repetition_penalty)
+    responses = run_vllm_model(prompts, model, model_name, max_new_tokens, temperature, top_p, top_k, repetition_penalty)
     empty_responses = save_responses(responses, model_name, output_dir, list(range(len(prompts))), prompts)
 
     if empty_responses:
-        new_responses = re_prompt_empty_responses(empty_responses, model, max_new_tokens, temperature, top_p, top_k, repetition_penalty)
+        new_responses = re_prompt_empty_responses(empty_responses, model, model_name, max_new_tokens, temperature, top_p, top_k, repetition_penalty)
         save_responses(new_responses, model_name, output_dir, [qid for _, qid, _ in empty_responses], [prompt for _, _, prompt in empty_responses])
 
     del model
@@ -116,6 +123,4 @@ def run_all_models(output_dir="model_responses", model_names="vicuna-33b", max_n
 
 if __name__ == "__main__":
     fire.Fire(run_all_models)
-
-
 
