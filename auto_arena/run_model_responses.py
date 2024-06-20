@@ -65,7 +65,7 @@ def run_vllm_model(prompts, model, model_name, max_new_tokens, top_k, gpu_memory
 def save_responses(responses, model_name, output_dir, prompt_ids, prompts):
     empty_responses = []
     for i, response in enumerate(responses):
-        prompt_id = prompt_ids[i]
+        prompt_id = prompt_ids[i]+80
         timestamp = datetime.now().strftime('%y%m%d%H%M%S%f')
         directory = os.path.join(output_dir, f"mt_bench_question_{prompt_id}")
         os.makedirs(directory, exist_ok=True)
